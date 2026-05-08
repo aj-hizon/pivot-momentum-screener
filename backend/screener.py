@@ -226,6 +226,8 @@ def touched(candle, ema):
 
 async def run_screener():
 
+    print("SCREENER RUNNING - NOT CACHE")
+    
     global cached_screener
     global screener_cache_time
 
@@ -309,4 +311,5 @@ async def run_screener():
         cached_screener = coins
         screener_cache_time = time.time()
 
+        print("RETURNING CACHE:", len(cached_screener))
         return coins
