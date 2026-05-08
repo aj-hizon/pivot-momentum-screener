@@ -1,10 +1,80 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+
 import aiohttp
+import asyncio
 
-from screener import run_screener, get_klines
+from screener import (
+    run_screener,
+    get_klines,
+    set_shared_session,
+)
 
-app = FastAPI()
+# ---------------------------
+# GLOBALS
+# ---------------------------
+
+session = None
+
+
+# ---------------------------
+# STARTUP / SHUTDOWN
+# ---------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    global session
+
+    connector = aiohttp.TCPConnector(
+        limit=50,
+        limit_per_host=20,
+        ttl_dns_cache=300,
+        enable_cleanup_closed=True,
+        ssl=False
+    )
+
+    timeout = aiohttp.ClientTimeout(
+        total=6
+    )
+
+    session = aiohttp.ClientSession(
+        connector=connector,
+        timeout=timeout,
+        headers={
+            "User-Agent": "screener-app"
+        }
+    )
+
+    set_shared_session(session)
+
+    print("Session started")
+
+    # warm screener cache
+    asyncio.create_task(run_screener())
+
+    yield
+
+    await session.close()
+
+    print("Session closed")
+
+
+app = FastAPI(
+    lifespan=lifespan
+)
+
+# ---------------------------
+# MIDDLEWARE
+# ---------------------------
+
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,26 +85,34 @@ app.add_middleware(
 )
 
 # ---------------------------
-# SCREENER
+# ROUTES
 # ---------------------------
+
+@app.get("/")
+
+async def root():
+    return {
+        "status": "running"
+    }
+
+
 @app.get("/screener")
+
 async def screener():
-    try:
-        return await run_screener()
-    except Exception as e:
-        print(f"Screener error: {e}")
-        return []
+    return await run_screener()
 
 
-# ---------------------------
-# KLINES
-# ---------------------------
 @app.get("/klines")
-async def klines(symbol: str, interval: str = "240"):
-    try:
-        async with aiohttp.ClientSession() as session:
-            _, candles = await get_klines(session, symbol, interval)
-            return candles or []
-    except Exception as e:
-        print(f"Klines error for {symbol}: {e}")
-        return []
+
+async def klines(
+    symbol: str,
+    interval: str = "240"
+):
+
+    _, candles = await get_klines(
+        session,
+        symbol,
+        interval
+    )
+
+    return candles or []

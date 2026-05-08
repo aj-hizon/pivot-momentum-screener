@@ -1,253 +1,312 @@
 import asyncio
 import aiohttp
 import time
-import sys
-
-sys.stdout.reconfigure(encoding="utf-8")
 
 BASE_URL = "https://api.bybit.com"
 
-cached_symbols = None
-cache_time = 0
-CACHE_DURATION = 3600  # 1 hour
+# ---------------------------
+# GLOBALS
+# ---------------------------
+
+shared_session = None
+
+cached_symbols = []
+symbols_cache_time = 0
+
+cached_screener = []
+screener_cache_time = 0
+
+klines_cache = {}
+
+SYMBOL_CACHE_DURATION = 3600
+SCREENER_CACHE_DURATION = 30
+KLINES_CACHE_DURATION = 15
+
+# prevents multiple scans at once
+screener_lock = asyncio.Lock()
+
+# safer for Render free tier
+SEMAPHORE_LIMIT = 10
 
 
 # ---------------------------
-# GET ALL SYMBOLS
+# SET SESSION
 # ---------------------------
-async def get_symbols(session):
-    global cached_symbols, cache_time
 
-    current_time = time.time()
+def set_shared_session(session):
+    global shared_session
+    shared_session = session
 
-    if cached_symbols and (current_time - cache_time) < CACHE_DURATION:
-        print(f"Using cached symbols: {len(cached_symbols)} symbols")
+
+# ---------------------------
+# GET SYMBOLS
+# ---------------------------
+
+async def get_symbols():
+    global cached_symbols, symbols_cache_time
+
+    now = time.time()
+
+    if now - symbols_cache_time < SYMBOL_CACHE_DURATION:
         return cached_symbols
 
     url = f"{BASE_URL}/v5/market/instruments-info"
 
-    all_symbols = []
+    symbols = []
     cursor = None
 
-    while True:
-        params = {
-            "category": "linear",
-            "limit": 1000
-        }
+    try:
+        while True:
 
-        if cursor:
-            params["cursor"] = cursor
+            params = {
+                "category": "linear",
+                "limit": 1000
+            }
 
-        try:
-            async with session.get(url, params=params) as res:
+            if cursor:
+                params["cursor"] = cursor
+
+            async with shared_session.get(
+                url,
+                params=params
+            ) as res:
+
+                if res.status != 200:
+                    break
+
                 data = await res.json()
 
-        except Exception as e:
-            print(f"Error fetching symbols: {e}")
-            break
+            items = data.get("result", {}).get("list", [])
 
-        if data.get("retCode") != 0:
-            print("API error while fetching symbols")
-            break
+            for item in items:
+                symbol = item.get("symbol")
 
-        result = data.get("result", {})
-        items = result.get("list", [])
+                if (
+                    symbol
+                    and symbol.endswith("USDT")
+                    and item.get("status") == "Trading"
+                ):
+                    symbols.append(symbol)
 
-        if not items:
-            break
+            cursor = data.get(
+                "result",
+                {}
+            ).get("nextPageCursor")
 
-        for item in items:
-            symbol = item.get("symbol")
+            if not cursor:
+                break
 
-            if not symbol:
-                continue
+    except Exception as e:
+        print(f"Symbols error: {e}")
 
-            if not symbol.endswith("USDT"):
-                continue
+    cached_symbols = symbols
+    symbols_cache_time = now
 
-            if item.get("status") != "Trading":
-                continue
+    print(f"Loaded {len(symbols)} symbols")
 
-            all_symbols.append(symbol)
-
-        cursor = result.get("nextPageCursor")
-
-        if not cursor:
-            break
-
-    print(f"Fetched {len(all_symbols)} USDT perpetuals")
-
-    cached_symbols = all_symbols
-    cache_time = current_time
-
-    return all_symbols
+    return symbols
 
 
 # ---------------------------
-# GET KLINES (FIXED + RETRY + BACKOFF)
+# GET KLINES
 # ---------------------------
+
 async def get_klines(session, symbol, interval="240"):
+
+    cache_key = f"{symbol}_{interval}"
+
+    now = time.time()
+
+    # CACHE HIT
+    if cache_key in klines_cache:
+
+        cached_time, cached_data = klines_cache[cache_key]
+
+        if now - cached_time < KLINES_CACHE_DURATION:
+            return symbol, cached_data
+
     url = f"{BASE_URL}/v5/market/kline"
 
     params = {
         "category": "linear",
         "symbol": symbol,
         "interval": interval,
-        "limit": 200
+        "limit": 60
     }
 
-    for attempt in range(3):
+    for attempt in range(2):
+
         try:
             async with session.get(
                 url,
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=6)
+                params=params
             ) as res:
 
-                if res.status == 403:
-                    print(f"{symbol} 403 retry {attempt + 1}")
-                    await asyncio.sleep(0.4 * (attempt + 1))
-                    continue
-
                 if res.status != 200:
-                    print(f"{symbol} HTTP {res.status}")
-                    return symbol, None
+
+                    await asyncio.sleep(0.2)
+
+                    continue
 
                 data = await res.json()
 
-            candles = data.get("result", {}).get("list", [])
+            candles = data.get(
+                "result",
+                {}
+            ).get("list", [])
 
             if not candles:
                 return symbol, None
 
-            candles = list(reversed(candles))
+            candles.reverse()
+
+            # SAVE CACHE
+            klines_cache[cache_key] = (
+                now,
+                candles
+            )
 
             return symbol, candles
 
-        except asyncio.TimeoutError:
-            print(f"{symbol} timeout retry {attempt + 1}")
-            await asyncio.sleep(0.3 * (attempt + 1))
-
-        except Exception as e:
-            print(f"{symbol} error {e}")
-            await asyncio.sleep(0.3 * (attempt + 1))
+        except Exception:
+            await asyncio.sleep(0.2)
 
     return symbol, None
 
 
 # ---------------------------
-# EMA SERIES
+# FAST EMA
 # ---------------------------
-def ema_series(closes, period=21):
+
+def ema21(closes):
+
+    period = 21
+
     if len(closes) < period:
-        return []
+        return None, None
 
     multiplier = 2 / (period + 1)
 
-    ema_values = []
+    ema = sum(closes[:period]) / period
 
-    sma = sum(closes[:period]) / period
-    ema_values = [None] * (period - 1)
-    ema_values.append(sma)
+    previous_ema = ema
 
-    previous_ema = sma
+    for close in closes[period:-1]:
 
-    for close in closes[period:]:
-        previous_ema = (close - previous_ema) * multiplier + previous_ema
-        ema_values.append(previous_ema)
+        previous_ema = (
+            (close - previous_ema)
+            * multiplier
+            + previous_ema
+        )
 
-    return ema_values
+    current_ema = (
+        (closes[-1] - previous_ema)
+        * multiplier
+        + previous_ema
+    )
+
+    return previous_ema, current_ema
 
 
 # ---------------------------
 # TOUCH CHECK
 # ---------------------------
-def touched_ema(candle, ema_value):
-    if ema_value is None:
-        return False
+
+def touched(candle, ema):
 
     high = float(candle[2])
     low = float(candle[3])
 
-    return low <= ema_value <= high
+    return low <= ema <= high
 
 
 # ---------------------------
 # SCREENER
 # ---------------------------
+
 async def run_screener():
-    start = time.perf_counter()
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            symbols = await get_symbols(session)
+    global cached_screener
+    global screener_cache_time
 
-            print(f"\nScanning {len(symbols)} coins...\n")
+    now = time.time()
 
-            semaphore = asyncio.Semaphore(8)  # FIXED (was 20 → too aggressive)
+    # RETURN CACHE
+    if now - screener_cache_time < SCREENER_CACHE_DURATION:
+        return cached_screener
 
-            async def limited(symbol):
-                async with semaphore:
-                    await asyncio.sleep(0.05)  # smooth rate
-                    return await get_klines(session, symbol)
+    # PREVENT MULTIPLE FULL SCANS
+    async with screener_lock:
 
-            tasks = [limited(sym) for sym in symbols]
+        # another request may already updated cache
+        now = time.time()
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        if now - screener_cache_time < SCREENER_CACHE_DURATION:
+            return cached_screener
 
-            coins = []
+        start = time.perf_counter()
 
-            for result in results:
-                if isinstance(result, Exception):
-                    continue
+        symbols = await get_symbols()
 
-                sym, candles = result
+        semaphore = asyncio.Semaphore(SEMAPHORE_LIMIT)
 
-                if not candles or len(candles) < 50:
-                    continue
+        async def worker(symbol):
 
+            async with semaphore:
+
+                return await get_klines(
+                    shared_session,
+                    symbol
+                )
+
+        tasks = [worker(sym) for sym in symbols]
+
+        results = await asyncio.gather(
+            *tasks,
+            return_exceptions=False
+        )
+
+        coins = []
+
+        for sym, candles in results:
+
+            if not candles:
+                continue
+
+            try:
                 closes = [float(c[4]) for c in candles]
 
-                ema21_values = ema_series(closes, 21)
+                previous_ema, current_ema = ema21(closes)
 
-                if len(ema21_values) < 2:
+                if previous_ema is None:
                     continue
 
                 current_candle = candles[-1]
                 previous_candle = candles[-2]
 
-                current_ema = ema21_values[-1]
-                previous_ema = ema21_values[-2]
+                if (
+                    touched(current_candle, current_ema)
+                    or touched(previous_candle, previous_ema)
+                ):
 
-                touched = (
-                    touched_ema(current_candle, current_ema)
-                    or touched_ema(previous_candle, previous_ema)
-                )
+                    coins.append({
+                        "symbol": sym,
+                        "close": closes[-1],
+                        "ema21": round(current_ema, 4),
+                    })
 
-                if not touched:
-                    continue
+            except:
+                continue
 
-                coins.append({
-                    "symbol": sym,
-                    "close": closes[-1],
-                    "ema21": current_ema,
-                    "touched_21ema": True
-                })
+        elapsed = time.perf_counter() - start
 
-        end = time.perf_counter()
+        print(
+            f"Scanned {len(symbols)} coins | "
+            f"Found {len(coins)} | "
+            f"{elapsed:.2f}s"
+        )
 
-        print(f"\nCoins touching 21 EMA: {len(coins)}")
-        print(f"Time: {end - start:.2f}s")
+        cached_screener = coins
+        screener_cache_time = time.time()
 
         return coins
-
-    except Exception as e:
-        print(f"Screener error: {e}")
-        return []
-
-
-# ---------------------------
-# MAIN
-# ---------------------------
-if __name__ == "__main__":
-    asyncio.run(run_screener())
