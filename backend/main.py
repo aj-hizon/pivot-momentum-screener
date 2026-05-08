@@ -34,7 +34,6 @@ async def lifespan(app: FastAPI):
         limit_per_host=20,
         ttl_dns_cache=300,
         enable_cleanup_closed=True,
-        ssl=False
     )
 
     timeout = aiohttp.ClientTimeout(
