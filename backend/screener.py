@@ -1,13 +1,8 @@
 import asyncio
 import aiohttp
 import time
-import traceback
 
 BASE_URL = "https://api.bybit.com"
-
-# ---------------------------
-# GLOBALS
-# ---------------------------
 
 shared_session = None
 
@@ -23,16 +18,10 @@ SYMBOL_CACHE_DURATION = 3600
 SCREENER_CACHE_DURATION = 30
 KLINES_CACHE_DURATION = 15
 
-# prevents multiple scans at once
 screener_lock = asyncio.Lock()
 
-# safer for Render free tier
-SEMAPHORE_LIMIT = 10
+SEMAPHORE_LIMIT = 25  # optimized for local server
 
-
-# ---------------------------
-# SET SESSION
-# ---------------------------
 
 def set_shared_session(session):
     global shared_session
@@ -40,19 +29,18 @@ def set_shared_session(session):
 
 
 # ---------------------------
-# GET SYMBOLS
+# SYMBOLS
 # ---------------------------
+
 
 async def get_symbols():
 
-    global cached_symbols
-    global symbols_cache_time
+    global cached_symbols, symbols_cache_time
 
     now = time.time()
 
-    # CACHE HIT
-    if now - symbols_cache_time < SYMBOL_CACHE_DURATION:
-        print(f"Using cached symbols: {len(cached_symbols)}")
+    # Cache layer
+    if cached_symbols and (now - symbols_cache_time) < SYMBOL_CACHE_DURATION:
         return cached_symbols
 
     url = f"{BASE_URL}/v5/market/instruments-info"
@@ -60,102 +48,88 @@ async def get_symbols():
     symbols = []
     cursor = None
 
-    print("FETCHING SYMBOLS FROM BYBIT...")
+    # retry wrapper for full function (extra safety)
+    for attempt in range(5):
 
-    try:
+        try:
+            while True:
 
-        while True:
+                params = {
+                    "category": "linear",
+                    "limit": 1000
+                }
 
-            params = {
-                "category": "linear",
-                "limit": 1000
-            }
+                if cursor:
+                    params["cursor"] = cursor
 
-            if cursor:
-                params["cursor"] = cursor
-
-            print("REQUESTING:", params)
-
-            async with shared_session.get(
-                url,
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as res:
-
-                print("SYMBOL STATUS:", res.status)
-
-                raw_text = await res.text()
-
-                print("RAW RESPONSE PREVIEW:")
-                print(raw_text[:300])
-
-                if res.status != 200:
-                    print("FAILED SYMBOL REQUEST")
-                    break
-
+                # SAFE REQUEST BLOCK
                 try:
-                    data = await res.json()
-                except Exception:
-                    print("JSON PARSE FAILED")
+                    async with shared_session.get(
+                        url,
+                        params=params,
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as res:
+
+                        if res.status != 200:
+                            print(f"[Bybit] HTTP {res.status}, retrying...")
+                            await asyncio.sleep(2)
+                            continue
+
+                        data = await res.json()
+
+                except Exception as e:
+                    print(f"[Bybit request error] {e}, retrying...")
+                    await asyncio.sleep(2)
+                    continue
+
+                result = data.get("result", {})
+                items = result.get("list", [])
+
+                if not items:
                     break
 
-            result = data.get("result", {})
+                for item in items:
+                    sym = item.get("symbol")
 
-            items = result.get("list", [])
+                    if sym and sym.endswith("USDT") and item.get("status") == "Trading":
+                        symbols.append(sym)
 
-            print(f"RECEIVED {len(items)} SYMBOLS")
+                cursor = result.get("nextPageCursor")
 
-            if not items:
-                print("NO ITEMS RETURNED")
-                break
+                if not cursor:
+                    break
 
-            for item in items:
+            # SUCCESS → update cache
+            cached_symbols = symbols
+            symbols_cache_time = now
 
-                symbol = item.get("symbol")
+            print(f"[Symbols] fetched: {len(symbols)}")
 
-                if (
-                    symbol
-                    and symbol.endswith("USDT")
-                    and item.get("status") == "Trading"
-                ):
-                    symbols.append(symbol)
+            return symbols
 
-            cursor = result.get("nextPageCursor")
+        except Exception as e:
+            print(f"[get_symbols retry {attempt+1}/5 failed]: {e}")
+            await asyncio.sleep(3)
 
-            print("NEXT CURSOR:", cursor)
+    # FINAL FALLBACK (never crash screener)
+    print("[get_symbols] FAILED → returning cached or empty list")
 
-            if not cursor:
-                break
-
-    except Exception:
-        print("GET SYMBOLS CRASHED:")
-        traceback.print_exc()
-
-    cached_symbols = symbols
-    symbols_cache_time = time.time()
-
-    print(f"FINAL SYMBOL COUNT: {len(symbols)}")
-
-    return symbols
+    return cached_symbols or []
 
 
 # ---------------------------
-# GET KLINES
+# KLINES
 # ---------------------------
 
-async def get_klines(session, symbol, interval="240"):
+async def get_klines(session, symbol, interval="240", limit=60):
 
-    cache_key = f"{symbol}_{interval}"
-
+    cache_key = f"{symbol}_{interval}_{limit}"
     now = time.time()
 
-    # CACHE HIT
     if cache_key in klines_cache:
-
-        cached_time, cached_data = klines_cache[cache_key]
-
-        if now - cached_time < KLINES_CACHE_DURATION:
-            return symbol, cached_data
+        t, data = klines_cache[cache_key]
+        if now - t < KLINES_CACHE_DURATION:
+            return symbol, data
 
     url = f"{BASE_URL}/v5/market/kline"
 
@@ -163,102 +137,65 @@ async def get_klines(session, symbol, interval="240"):
         "category": "linear",
         "symbol": symbol,
         "interval": interval,
-        "limit": 60
+        "limit": limit
     }
 
-    for attempt in range(2):
+    try:
+        async with session.get(url, params=params) as res:
 
-        try:
-
-            async with session.get(
-                url,
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=8)
-            ) as res:
-
-                if res.status != 200:
-
-                    print(f"{symbol} HTTP {res.status}")
-
-                    await asyncio.sleep(0.2)
-
-                    continue
-
-                data = await res.json()
-
-            candles = data.get(
-                "result",
-                {}
-            ).get("list", [])
-
-            if not candles:
-
-                print(f"{symbol} EMPTY CANDLES")
-
+            if res.status != 200:
                 return symbol, None
 
-            candles.reverse()
+            data = await res.json()
 
-            # SAVE CACHE
-            klines_cache[cache_key] = (
-                now,
-                candles
-            )
+        candles = data.get("result", {}).get("list", [])
 
-            return symbol, candles
+        if not candles:
+            return symbol, None
 
-        except Exception as e:
+        candles.reverse()
 
-            print(f"{symbol} ERROR: {str(e)}")
+        klines_cache[cache_key] = (now, candles)
 
-            await asyncio.sleep(0.2)
+        return symbol, candles
 
-    return symbol, None
+    except:
+        return symbol, None
 
 
 # ---------------------------
-# FAST EMA
+# EMA (FAST - NO ALLOCATION)
 # ---------------------------
 
-def ema21(closes):
+def ema21_from_candles(candles):
 
     period = 21
 
-    if len(closes) < period:
-        return None, None
+    if len(candles) < period:
+        return None, None, None
 
     multiplier = 2 / (period + 1)
 
-    ema = sum(closes[:period]) / period
+    sma = 0.0
+    for i in range(period):
+        sma += float(candles[i][4])
 
-    previous_ema = ema
+    ema = sma / period
+    prev = ema
 
-    for close in closes[period:-1]:
+    for c in candles[period:-1]:
+        close = float(c[4])
+        prev = (close - prev) * multiplier + prev
 
-        previous_ema = (
-            (close - previous_ema)
-            * multiplier
-            + previous_ema
-        )
+    last_close = float(candles[-1][4])
+    current = (last_close - prev) * multiplier + prev
 
-    current_ema = (
-        (closes[-1] - previous_ema)
-        * multiplier
-        + previous_ema
-    )
+    return prev, current, last_close
 
-    return previous_ema, current_ema
-
-
-# ---------------------------
-# TOUCH CHECK
-# ---------------------------
 
 def touched(candle, ema):
-
     high = float(candle[2])
     low = float(candle[3])
-
     return low <= ema <= high
 
 
@@ -268,108 +205,62 @@ def touched(candle, ema):
 
 async def run_screener():
 
-    print("SCREENER RUNNING - NOT CACHE")
-
-    global cached_screener
-    global screener_cache_time
+    global cached_screener, screener_cache_time
 
     now = time.time()
 
-    # RETURN CACHE
     if now - screener_cache_time < SCREENER_CACHE_DURATION:
-
-        print("RETURNING CACHE:", len(cached_screener))
-
         return cached_screener
 
-    # PREVENT MULTIPLE FULL SCANS
     async with screener_lock:
 
         now = time.time()
 
         if now - screener_cache_time < SCREENER_CACHE_DURATION:
-
-            print("RETURNING CACHE AFTER LOCK:", len(cached_screener))
-
             return cached_screener
-
-        start = time.perf_counter()
 
         symbols = await get_symbols()
 
-        print(f"SYMBOLS TO SCAN: {len(symbols)}")
-
         if not symbols:
-            print("NO SYMBOLS AVAILABLE")
             return []
 
         semaphore = asyncio.Semaphore(SEMAPHORE_LIMIT)
 
-        async def worker(symbol):
-
+        async def worker(sym):
             async with semaphore:
+                return await get_klines(shared_session, sym)
 
-                return await get_klines(
-                    shared_session,
-                    symbol
-                )
-
-        tasks = [worker(sym) for sym in symbols]
-
-        results = await asyncio.gather(
-            *tasks,
-            return_exceptions=False
-        )
+        tasks = [asyncio.create_task(worker(s)) for s in symbols]
 
         coins = []
 
-        for sym, candles in results:
+        for task in asyncio.as_completed(tasks):
+
+            sym, candles = await task
 
             if not candles:
                 continue
 
             try:
+                prev_ema, curr_ema, last_close = ema21_from_candles(candles)
 
-                closes = [float(c[4]) for c in candles]
-
-                previous_ema, current_ema = ema21(closes)
-
-                if previous_ema is None:
+                if prev_ema is None:
                     continue
 
-                current_candle = candles[-1]
-                previous_candle = candles[-2]
-
                 if (
-                    touched(current_candle, current_ema)
-                    or touched(previous_candle, previous_ema)
+                    touched(candles[-1], curr_ema)
+                    or touched(candles[-2], prev_ema)
                 ):
-
-                    print(f"EMA TOUCH FOUND: {sym}")
-
                     coins.append({
                         "symbol": sym,
-                        "close": closes[-1],
-                        "ema21": round(current_ema, 4),
+                        "close": last_close,
+                        "ema21": round(curr_ema, 4),
                     })
 
-            except Exception as e:
-
-                print(f"{sym} PROCESSING ERROR: {str(e)}")
-
+            except:
                 continue
-
-        elapsed = time.perf_counter() - start
-
-        print(
-            f"Scanned {len(symbols)} coins | "
-            f"Found {len(coins)} | "
-            f"{elapsed:.2f}s"
-        )
 
         cached_screener = coins
         screener_cache_time = time.time()
-
-        print("RETURNING CACHE:", len(cached_screener))
 
         return coins

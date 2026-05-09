@@ -92,7 +92,7 @@ export default function Chart({
     // FETCH DATA
     // ---------------------------
 
-    fetchKlinesWithCache(symbol, timeframe).then((data) => {
+    fetchKlinesWithCache(symbol, timeframe, 200).then((data) => {
       if (!data || data.length === 0) return;
 
       // ---------------------------
