@@ -59,8 +59,7 @@ async def get_symbols():
                     "limit": 1000
                 }
 
-                if cursor:
-                    params["cursor"] = cursor
+                if cursor: params["cursor"] = cursor
 
                 # SAFE REQUEST BLOCK
                 try:
