@@ -10,24 +10,34 @@ export default function App() {
   const [filteredCoins, setFilteredCoins] = useState([]);
   const [filter, setFilter] = useState("all"); // "all", "above", "below"
   const [index, setIndex] = useState(0);
-  const [timeframe, setTimeframe] = useState("240");
+  const [timeframe, setTimeframe] = useState("5");
   const [inverted, setInverted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const selected = filteredCoins?.length > 0 ? filteredCoins[index] : null;
   const isMobile = useIsMobile();
 
   // load screener
   useEffect(() => {
+    setLoading(true);
+    setError(null);
+
     getScreener()
       .then((data) => {
         if (Array.isArray(data)) {
           setAllCoins(data);
         } else {
           setAllCoins([]);
+          setError('Unexpected screener response');
         }
       })
-      .catch(() => {
+      .catch((err) => {
         setAllCoins([]);
+        setError(err.message || 'Failed to load screener');
+      })
+      .finally(() => {
+        setLoading(false);
       });
   }, []);
 
@@ -35,9 +45,9 @@ export default function App() {
   useEffect(() => {
     let filtered = allCoins;
     if (filter === "above") {
-      filtered = allCoins.filter(coin => coin.close > coin.ema21);
+      filtered = allCoins.filter(coin => coin.trend === "above");
     } else if (filter === "below") {
-      filtered = allCoins.filter(coin => coin.close < coin.ema21);
+      filtered = allCoins.filter(coin => coin.trend === "below");
     }
     setFilteredCoins(filtered);
     setIndex(0); // reset to first
@@ -60,6 +70,45 @@ export default function App() {
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
   }, [filteredCoins]);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          color: 'white',
+          background: '#000',
+        }}
+      >
+        Loading screener...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          color: 'white',
+          background: '#000',
+          padding: 20,
+          textAlign: 'center',
+        }}
+      >
+        <div>
+          <p style={{ margin: 0, fontSize: 18 }}>Screener error</p>
+          <p style={{ margin: 0 }}>{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return isMobile ? (
     <MobileSwiper 

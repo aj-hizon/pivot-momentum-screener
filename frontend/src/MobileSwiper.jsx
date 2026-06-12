@@ -96,6 +96,20 @@ export default function MobileSwiper({
 
         <div style={{ display: "flex", gap: 5 }}>
           <button
+            onClick={() => onTimeframeChange("5")}
+            style={{
+              background: timeframe === "5" ? "#26a69a" : "#333",
+              color: "white",
+              border: "none",
+              padding: "5px 10px",
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
+          >
+            5M
+          </button>
+
+          <button
             onClick={() => onTimeframeChange("60")}
             style={{
               background: timeframe === "60" ? "#26a69a" : "#333",

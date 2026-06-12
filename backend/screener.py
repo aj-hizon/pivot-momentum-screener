@@ -120,7 +120,7 @@ async def get_symbols():
 # KLINES
 # ---------------------------
 
-async def get_klines(session, symbol, interval="240", limit=60):
+async def get_klines(session, symbol, interval="5", limit=60):
 
     cache_key = f"{symbol}_{interval}_{limit}"
     now = time.time()
@@ -227,7 +227,7 @@ async def run_screener():
 
         async def worker(sym):
             async with semaphore:
-                return await get_klines(shared_session, sym)
+                return await get_klines(shared_session, sym, interval="60")
 
         tasks = [asyncio.create_task(worker(s)) for s in symbols]
 
@@ -254,6 +254,7 @@ async def run_screener():
                         "symbol": sym,
                         "close": last_close,
                         "ema21": round(curr_ema, 4),
+                        "trend": "above" if last_close >= curr_ema else "below",
                     })
 
             except:

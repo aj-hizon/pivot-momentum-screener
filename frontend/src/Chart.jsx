@@ -250,6 +250,13 @@ export default function Chart({
             }}
           >
             <button
+              onClick={() => onTimeframeChange("5")}
+              style={buttonStyle(timeframe === "5")}
+            >
+              5M
+            </button>
+
+            <button
               onClick={() => onTimeframeChange("60")}
               style={buttonStyle(timeframe === "60")}
             >

@@ -78,6 +78,6 @@ async def screener():
 
 
 @app.get("/klines")
-async def klines(symbol: str, interval: str = "240"):
+async def klines(symbol: str, interval: str = "5"):
     _, candles = await get_klines(session, symbol, interval)
     return candles or []
