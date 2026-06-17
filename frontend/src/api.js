@@ -5,9 +5,9 @@ export async function getScreener() {
   return res.json();
 }
 
-export async function getKlines(symbol, interval = "5") {
+export async function getKlines(symbol, interval = "5", limit = 200) {
   const res = await fetch(
-    `${BASE_URL}/klines?symbol=${symbol}&interval=${interval}`
+    `${BASE_URL}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
   );
 
   return res.json();

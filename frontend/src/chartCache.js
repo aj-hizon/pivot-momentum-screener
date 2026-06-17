@@ -6,8 +6,8 @@ function getKey(symbol, interval) {
   return `${symbol}_${interval}`;
 }
 
-export async function fetchKlinesWithCache(symbol, interval) {
-  const key = getKey(symbol, interval);
+export async function fetchKlinesWithCache(symbol, interval, limit = 200) {
+  const key = `${symbol}_${interval}_${limit}`;
   const existing = cache.get(key);
 
   if (existing) {
@@ -17,7 +17,7 @@ export async function fetchKlinesWithCache(symbol, interval) {
     return existing.promise;
   }
 
-  const promise = getKlines(symbol, interval)
+  const promise = getKlines(symbol, interval, limit)
     .then((data) => {
       cache.set(key, { status: "done", data: data || [] });
       return data || [];

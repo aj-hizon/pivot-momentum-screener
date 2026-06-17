@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
         enable_cleanup_closed=True,
     )
 
-    timeout = aiohttp.ClientTimeout(total=6)
+    timeout = aiohttp.ClientTimeout(total=20)
 
     session = aiohttp.ClientSession(
         connector=connector,

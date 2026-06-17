@@ -22,7 +22,7 @@ export default function Chart({
     // ---------------------------
 
     const chart = createChart(ref.current, {
-      width: ref.current.clientWidth,
+      width: ref.current.clientWidth || 600,
 
       layout: {
         background: { color: "#000" },
@@ -168,6 +168,7 @@ export default function Chart({
       // TRADINGVIEW FEEL
       // ---------------------------
 
+      chart.timeScale().fitContent();
       chart.timeScale().scrollToPosition(15, false);
     });
 
@@ -237,7 +238,9 @@ export default function Chart({
                 ? "4h"
                 : timeframe === "D"
                   ? "1d"
-                  : "1w"}
+                  : timeframe === "W"
+                    ? "1w"
+                    : "?"}
         </span>
 
         {/* BUTTONS */}
@@ -275,6 +278,13 @@ export default function Chart({
               style={buttonStyle(timeframe === "D")}
             >
               1D
+            </button>
+
+            <button
+              onClick={() => onTimeframeChange("W")}
+              style={buttonStyle(timeframe === "W")}
+            >
+              1W
             </button>
 
             {/* INVERT BUTTON */}

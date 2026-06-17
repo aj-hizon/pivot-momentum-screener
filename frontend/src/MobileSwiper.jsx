@@ -152,6 +152,20 @@ export default function MobileSwiper({
           </button>
 
           <button
+            onClick={() => onTimeframeChange("W")}
+            style={{
+              background: timeframe === "W" ? "#26a69a" : "#333",
+              color: "white",
+              border: "none",
+              padding: "5px 10px",
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
+          >
+            1W
+          </button>
+
+          <button
             onClick={() => setInverted(!inverted)}
             style={{
               background: inverted ? "#ff6b6b" : "#333",
