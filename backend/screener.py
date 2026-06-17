@@ -151,7 +151,7 @@ async def get_klines(session, symbol, interval="5", limit=60):
             await asyncio.sleep(0.3 * (attempt + 1))
             continue
 
-    # fallback mock (unchanged)
+    # fallback mock
     base_price = 100.0
     if 'BTC' in symbol:
         base_price = 50000
@@ -210,14 +210,8 @@ def ema_from_candles(candles, period):
     return prev, current, last_close
 
 
-def touched(candle, ema):
-    high = float(candle[2])
-    low = float(candle[3])
-    return low <= ema <= high
-
-
 # ---------------------------
-# SCREENER (FIXED LOGIC)
+# SCREENER (NEW LOGIC)
 # ---------------------------
 
 async def _refresh_screener():
@@ -235,41 +229,53 @@ async def _refresh_screener():
         async def worker(sym):
             async with semaphore:
                 _, candles_1h = await get_klines(shared_session, sym, interval="60", limit=200)
-                return sym, candles_1h
+                _, candles_d = await get_klines(shared_session, sym, interval="D", limit=30)
+                return sym, candles_1h, candles_d
 
         tasks = [asyncio.create_task(worker(s)) for s in symbols]
 
         coins = []
 
         for task in asyncio.as_completed(tasks):
-            sym, candles_1h = await task
+            sym, candles_1h, candles_d = await task
 
-            if not candles_1h:
+            if not candles_1h or not candles_d:
                 continue
 
             try:
-                _, ema21, last_close = ema_from_candles(candles_1h, 21)
+                _, ema21_1h, close_1h = ema_from_candles(candles_1h, 21)
+                _, ema5_d, close_d = ema_from_candles(candles_d, 5)
 
-                if ema21 is None:
+                if ema21_1h is None or ema5_d is None:
                     continue
 
-                trend = "above" if last_close >= ema21 else "below"
+                # ---------------------------
+                # YOUR NEW RULES
+                # ---------------------------
+                
+                # LONG setup
+                if close_1h > ema21_1h and close_d < ema5_d:
+                    coins.append({
+                        "symbol": sym,
+                        "close": close_1h,
+                        "ema21": round(ema21_1h, 4),
+                        "ema5_daily": round(ema5_d, 4),
+                        "trend": "above21ema"
+                    })
 
-                # optional touch filter (soft, NOT blocking everything)
-                if not any(touched(candles_1h[-(i+1)], ema21) for i in range(3)):
-                    continue
-
-                coins.append({
-                    "symbol": sym,
-                    "close": last_close,
-                    "ema21": round(ema21, 4),
-                    "trend": trend
-                })
+# SHORT setup
+                elif close_1h < ema21_1h and close_d > ema5_d:
+                    coins.append({
+                        "symbol": sym,
+                        "close": close_1h,
+                        "ema21": round(ema21_1h, 4),
+                        "ema5_daily": round(ema5_d, 4),
+                        "trend": "below21ema"
+                    })
 
             except Exception:
                 continue
 
-        # IMPORTANT: always update cache even if empty
         cached_screener = coins
         screener_cache_time = time.time()
 
