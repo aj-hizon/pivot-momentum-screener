@@ -15,61 +15,42 @@ export default function MobileSwiper({
 }) {
   const [inverted, setInverted] = useState(false);
 
-  // -----------------------------
-  // TIMEFRAME LABELS (FIX)
-  // -----------------------------
-  const TIMEFRAME_LABELS = {
-    5: "5M",
-    60: "1H",
-    240: "4H",
-    D: "1D",
-    W: "1W",
-  };
-
-  // -----------------------------
-  // SAFE INDEX HANDLING
-  // -----------------------------
+  // SAFE INDEX
   const safeIndex =
-    coins && coins.length > 0 ? Math.min(selectedIndex, coins.length - 1) : 0;
+    coins && coins.length > 0
+      ? Math.min(selectedIndex, coins.length - 1)
+      : 0;
 
   const selectedCoin = coins?.[safeIndex];
 
-  // -----------------------------
-  // PREFETCH (SAFE)
-  // -----------------------------
+  // PREFETCH
   useEffect(() => {
     if (!coins || coins.length === 0) return;
 
     const current = coins[safeIndex];
-
     if (!current) return;
 
-    const neighbors = [coins[safeIndex - 1], coins[safeIndex + 1]]
+    const neighbors = [
+      coins[safeIndex - 1],
+      coins[safeIndex + 1],
+    ]
       .filter(Boolean)
       .map((c) => c.symbol);
 
     prefetchKlines(current.symbol, timeframe);
-
-    neighbors.forEach((symbol) => {
-      prefetchKlines(symbol, timeframe);
-    });
+    neighbors.forEach((symbol) => prefetchKlines(symbol, timeframe));
   }, [coins, safeIndex, timeframe]);
 
-  // -----------------------------
-  // EMPTY STATE
-  // -----------------------------
   if (!coins || coins.length === 0) {
     return (
-      <div
-        style={{
-          height: "100vh",
-          background: "#000",
-          color: "white",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <div style={{
+        height: "100vh",
+        background: "#000",
+        color: "white",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+      }}>
         No coins match filter
       </div>
     );
@@ -85,9 +66,7 @@ export default function MobileSwiper({
         flexDirection: "column",
       }}
     >
-      {/* ----------------------------- */}
-      {/* CONTROLS */}
-      {/* ----------------------------- */}
+      {/* ---------------- CONTROLS ---------------- */}
       <div
         style={{
           background: "#111",
@@ -96,6 +75,7 @@ export default function MobileSwiper({
           justifyContent: "space-between",
           alignItems: "center",
           flexShrink: 0,
+          gap: 10,
         }}
       >
         {/* FILTER */}
@@ -103,14 +83,15 @@ export default function MobileSwiper({
           value={filter}
           onChange={(e) => {
             onFilterChange(e.target.value);
-            onSelect(0); // reset index when filter changes
+            onSelect(0);
           }}
           style={{
             background: "#1f1f1f",
             color: "white",
             border: "none",
-            padding: 5,
+            padding: 6,
             borderRadius: 4,
+            flex: 1,
           }}
         >
           <option value="all">All Coins</option>
@@ -118,53 +99,48 @@ export default function MobileSwiper({
           <option value="below21ema">Below 21 EMA</option>
         </select>
 
-        {/* TIMEFRAMES */}
-        <div style={{ display: "flex", gap: 5 }}>
-          {Object.keys(TIMEFRAME_LABELS).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => onTimeframeChange(tf)}
-              style={{
-                background: timeframe === tf ? "#26a69a" : "#333",
-                color: "white",
-                border: "none",
-                padding: "5px 10px",
-                borderRadius: 4,
-                cursor: "pointer",
-              }}
-            >
-              {TIMEFRAME_LABELS[tf]}
-            </button>
-          ))}
+        {/* TIMEFRAME DROPDOWN (FIX) */}
+        <select
+          value={timeframe}
+          onChange={(e) => onTimeframeChange(e.target.value)}
+          style={{
+            background: "#1f1f1f",
+            color: "white",
+            border: "none",
+            padding: 6,
+            borderRadius: 4,
+            flex: 1,
+          }}
+        >
+          <option value="5">5M</option>
+          <option value="60">1H</option>
+          <option value="240">4H</option>
+          <option value="D">1D</option>
+          <option value="W">1W</option>
+        </select>
 
-          {/* INVERT */}
-          <button
-            onClick={() => setInverted((prev) => !prev)}
-            style={{
-              background: inverted ? "#ff6b6b" : "#333",
-              color: "white",
-              border: "none",
-              padding: "5px 10px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            ⟳
-          </button>
-        </div>
+        {/* INVERT */}
+        <button
+          onClick={() => setInverted((p) => !p)}
+          style={{
+            background: inverted ? "#ff6b6b" : "#333",
+            color: "white",
+            border: "none",
+            padding: "6px 10px",
+            borderRadius: 4,
+          }}
+        >
+          ⟳
+        </button>
       </div>
 
-      {/* ----------------------------- */}
-      {/* SWIPER */}
-      {/* ----------------------------- */}
+      {/* ---------------- SWIPER ---------------- */}
       <div style={{ flexShrink: 0, padding: 10 }}>
         <Swiper
           spaceBetween={10}
           slidesPerView={1}
           initialSlide={safeIndex}
-          onSlideChange={(swiper) => {
-            onSelect(swiper.activeIndex);
-          }}
+          onSlideChange={(swiper) => onSelect(swiper.activeIndex)}
           style={{ height: 80 }}
         >
           {coins.map((coin) => (
@@ -187,16 +163,16 @@ export default function MobileSwiper({
                   Price: {Number(coin.close).toFixed(4)}
                 </p>
 
-                <p style={{ margin: 5 }}>EMA21: {coin.ema21?.toFixed(4)}</p>
+                <p style={{ margin: 5 }}>
+                  EMA21: {coin.ema21?.toFixed(4)}
+                </p>
               </div>
             </SwiperSlide>
           ))}
         </Swiper>
       </div>
 
-      {/* ----------------------------- */}
-      {/* CHART */}
-      {/* ----------------------------- */}
+      {/* ---------------- CHART ---------------- */}
       <div style={{ flex: 1, padding: 10 }}>
         {selectedCoin && (
           <Chart
