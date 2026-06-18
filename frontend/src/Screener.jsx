@@ -1,43 +1,57 @@
+import { useEffect, useRef } from "react";
+
 export default function Screener({
   coins,
   selected,
   filter,
   onFilterChange,
-  onSelect
+  onSelect,
 }) {
+  const itemRefs = useRef({});
 
-  // -----------------------------
-  // FRONTEND FILTER LOGIC (FIXED)
-  // -----------------------------
-  const filteredCoins = coins.filter((coin) => {
-    if (filter === "all") return true;
+  // -----------------------------------
+  // AUTO SCROLL TO SELECTED ITEM
+  // -----------------------------------
+  useEffect(() => {
+    if (!selected?.symbol) return;
 
-    if (filter === "above21ema") {
-      return coin.trend === "above21ema";
+    const el = itemRefs.current[selected.symbol];
+
+    if (el) {
+      el.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
     }
-
-    if (filter === "below21ema") {
-      return coin.trend === "below21ema";
-    }
-
-    return true;
-  });
+  }, [selected]);
 
   return (
-    <div style={{
-      width: 220,
-      background: "#0b0b0b",
-      color: "white",
-      overflowY: "auto",
-      height: "100vh",
-      display: "flex",
-      flexDirection: "column"
-    }}>
-
+    <div
+      style={{
+        width: 220,
+        background: "#0b0b0b",
+        color: "white",
+        overflowY: "auto",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {/* HEADER */}
-      <div style={{ padding: 10, borderBottom: "1px solid #222" }}>
-        <div style={{ marginBottom: 8, fontSize: 12, color: "#aaa" }}>
-          {filteredCoins.length} coins
+      <div
+        style={{
+          padding: 10,
+          borderBottom: "1px solid #222",
+        }}
+      >
+        <div
+          style={{
+            marginBottom: 8,
+            fontSize: 12,
+            color: "#aaa",
+          }}
+        >
+          {coins.length} coins
         </div>
 
         <select
@@ -48,7 +62,7 @@ export default function Screener({
             background: "#1f1f1f",
             color: "white",
             border: "none",
-            padding: 5
+            padding: 5,
           }}
         >
           <option value="all">All Coins</option>
@@ -59,29 +73,39 @@ export default function Screener({
 
       {/* LIST */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {filteredCoins.length === 0 ? (
-          <div style={{ padding: 10, color: "#888" }}>
+        {coins.length === 0 ? (
+          <div
+            style={{
+              padding: 10,
+              color: "#888",
+            }}
+          >
             No coins match the selected filter.
           </div>
         ) : (
-          filteredCoins.map((coin, idx) => (
+          coins.map((coin, idx) => (
             <div
               key={coin.symbol}
+              ref={(el) => {
+                itemRefs.current[coin.symbol] = el;
+              }}
               onClick={() => onSelect(idx)}
               style={{
                 padding: 10,
+                cursor: "pointer",
+                borderBottom: "1px solid #222",
                 background:
                   selected?.symbol === coin.symbol ? "#1f1f1f" : "transparent",
-                borderBottom: "1px solid #222",
-                cursor: "pointer"
               }}
             >
               <div style={{ fontSize: 13 }}>{coin.symbol}</div>
 
-              <div style={{
-                fontSize: 10,
-                color: coin.trend === "above21ema" ? "#4ade80" : "#f87171"
-              }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: coin.trend === "above21ema" ? "#4ade80" : "#f87171",
+                }}
+              >
                 {coin.trend}
               </div>
             </div>
