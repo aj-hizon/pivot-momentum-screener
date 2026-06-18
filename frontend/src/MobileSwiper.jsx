@@ -15,29 +15,49 @@ export default function MobileSwiper({
 }) {
   const [inverted, setInverted] = useState(false);
 
-  // ALWAYS define hooks before any conditional return
+  // -----------------------------
+  // TIMEFRAME LABELS (FIX)
+  // -----------------------------
+  const TIMEFRAME_LABELS = {
+    5: "5M",
+    60: "1H",
+    240: "4H",
+    D: "1D",
+    W: "1W",
+  };
+
+  // -----------------------------
+  // SAFE INDEX HANDLING
+  // -----------------------------
+  const safeIndex =
+    coins && coins.length > 0 ? Math.min(selectedIndex, coins.length - 1) : 0;
+
+  const selectedCoin = coins?.[safeIndex];
+
+  // -----------------------------
+  // PREFETCH (SAFE)
+  // -----------------------------
   useEffect(() => {
     if (!coins || coins.length === 0) return;
 
-    const selectedSymbol = coins[selectedIndex]?.symbol;
+    const current = coins[safeIndex];
 
-    const neighbors = [
-      coins[selectedIndex - 1],
-      coins[selectedIndex + 1],
-    ]
+    if (!current) return;
+
+    const neighbors = [coins[safeIndex - 1], coins[safeIndex + 1]]
       .filter(Boolean)
-      .map((coin) => coin.symbol);
+      .map((c) => c.symbol);
 
-    if (selectedSymbol) {
-      prefetchKlines(selectedSymbol, timeframe);
-    }
+    prefetchKlines(current.symbol, timeframe);
 
     neighbors.forEach((symbol) => {
       prefetchKlines(symbol, timeframe);
     });
-  }, [coins, selectedIndex, timeframe]);
+  }, [coins, safeIndex, timeframe]);
 
-  // Safe fallback
+  // -----------------------------
+  // EMPTY STATE
+  // -----------------------------
   if (!coins || coins.length === 0) {
     return (
       <div
@@ -50,12 +70,10 @@ export default function MobileSwiper({
           alignItems: "center",
         }}
       >
-        Loading coins...
+        No coins match filter
       </div>
     );
   }
-
-  const selectedCoin = coins[selectedIndex];
 
   return (
     <div
@@ -67,7 +85,9 @@ export default function MobileSwiper({
         flexDirection: "column",
       }}
     >
-      {/* Controls */}
+      {/* ----------------------------- */}
+      {/* CONTROLS */}
+      {/* ----------------------------- */}
       <div
         style={{
           background: "#111",
@@ -78,9 +98,13 @@ export default function MobileSwiper({
           flexShrink: 0,
         }}
       >
+        {/* FILTER */}
         <select
           value={filter}
-          onChange={(e) => onFilterChange(e.target.value)}
+          onChange={(e) => {
+            onFilterChange(e.target.value);
+            onSelect(0); // reset index when filter changes
+          }}
           style={{
             background: "#1f1f1f",
             color: "white",
@@ -90,83 +114,32 @@ export default function MobileSwiper({
           }}
         >
           <option value="all">All Coins</option>
-          <option value="above">Above 21 EMA</option>
-          <option value="below">Below 21 EMA</option>
+          <option value="above21ema">Above 21 EMA</option>
+          <option value="below21ema">Below 21 EMA</option>
         </select>
 
+        {/* TIMEFRAMES */}
         <div style={{ display: "flex", gap: 5 }}>
-          <button
-            onClick={() => onTimeframeChange("5")}
-            style={{
-              background: timeframe === "5" ? "#26a69a" : "#333",
-              color: "white",
-              border: "none",
-              padding: "5px 10px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            5M
-          </button>
+          {Object.keys(TIMEFRAME_LABELS).map((tf) => (
+            <button
+              key={tf}
+              onClick={() => onTimeframeChange(tf)}
+              style={{
+                background: timeframe === tf ? "#26a69a" : "#333",
+                color: "white",
+                border: "none",
+                padding: "5px 10px",
+                borderRadius: 4,
+                cursor: "pointer",
+              }}
+            >
+              {TIMEFRAME_LABELS[tf]}
+            </button>
+          ))}
 
+          {/* INVERT */}
           <button
-            onClick={() => onTimeframeChange("60")}
-            style={{
-              background: timeframe === "60" ? "#26a69a" : "#333",
-              color: "white",
-              border: "none",
-              padding: "5px 10px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            1H
-          </button>
-
-          <button
-            onClick={() => onTimeframeChange("240")}
-            style={{
-              background: timeframe === "240" ? "#26a69a" : "#333",
-              color: "white",
-              border: "none",
-              padding: "5px 10px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            4H
-          </button>
-
-          <button
-            onClick={() => onTimeframeChange("D")}
-            style={{
-              background: timeframe === "D" ? "#26a69a" : "#333",
-              color: "white",
-              border: "none",
-              padding: "5px 10px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            1D
-          </button>
-
-          <button
-            onClick={() => onTimeframeChange("W")}
-            style={{
-              background: timeframe === "W" ? "#26a69a" : "#333",
-              color: "white",
-              border: "none",
-              padding: "5px 10px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            1W
-          </button>
-
-          <button
-            onClick={() => setInverted(!inverted)}
+            onClick={() => setInverted((prev) => !prev)}
             style={{
               background: inverted ? "#ff6b6b" : "#333",
               color: "white",
@@ -174,23 +147,24 @@ export default function MobileSwiper({
               padding: "5px 10px",
               borderRadius: 4,
               cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold",
             }}
-            title="Invert chart"
           >
             ⟳
           </button>
         </div>
       </div>
 
-      {/* Coin Info Swiper */}
+      {/* ----------------------------- */}
+      {/* SWIPER */}
+      {/* ----------------------------- */}
       <div style={{ flexShrink: 0, padding: 10 }}>
         <Swiper
           spaceBetween={10}
           slidesPerView={1}
-          onSlideChange={(swiper) => onSelect(swiper.activeIndex)}
-          initialSlide={selectedIndex}
+          initialSlide={safeIndex}
+          onSlideChange={(swiper) => {
+            onSelect(swiper.activeIndex);
+          }}
           style={{ height: 80 }}
         >
           {coins.map((coin) => (
@@ -213,16 +187,16 @@ export default function MobileSwiper({
                   Price: {Number(coin.close).toFixed(4)}
                 </p>
 
-                <p style={{ margin: 5 }}>
-                  EMA21: {coin.ema21?.toFixed(4)}
-                </p>
+                <p style={{ margin: 5 }}>EMA21: {coin.ema21?.toFixed(4)}</p>
               </div>
             </SwiperSlide>
           ))}
         </Swiper>
       </div>
 
-      {/* Chart */}
+      {/* ----------------------------- */}
+      {/* CHART */}
+      {/* ----------------------------- */}
       <div style={{ flex: 1, padding: 10 }}>
         {selectedCoin && (
           <Chart

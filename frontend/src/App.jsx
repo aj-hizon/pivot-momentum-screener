@@ -8,8 +8,8 @@ import { useIsMobile } from "./hooks/useIsMobile";
 export default function App() {
   const [allCoins, setAllCoins] = useState([]);
   const [filteredCoins, setFilteredCoins] = useState([]);
-  const [filter, setFilter] = useState("all");
 
+  const [filter, setFilter] = useState("all");
   const [index, setIndex] = useState(0);
 
   const [timeframe, setTimeframe] = useState("5");
@@ -20,160 +20,109 @@ export default function App() {
 
   const isMobile = useIsMobile();
 
-  const selected =
-    filteredCoins.length > 0
-      ? filteredCoins[Math.min(index, filteredCoins.length - 1)]
-      : null;
+  const selected = filteredCoins[index] || null;
 
-  // -----------------------------------
-  // LOAD SCREENER
-  // -----------------------------------
+  // -----------------------------
+  // LOAD DATA
+  // -----------------------------
   useEffect(() => {
     setLoading(true);
     setError(null);
 
     getScreener()
       .then((data) => {
-        if (Array.isArray(data)) {
-          setAllCoins(data);
-        } else {
-          setAllCoins([]);
-          setError("Unexpected screener response");
-        }
+        setAllCoins(Array.isArray(data) ? data : []);
       })
-      .catch((err) => {
-        setAllCoins([]);
-        setError(err.message || "Failed to load screener");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      .catch((err) => setError(err.message || "Failed"))
+      .finally(() => setLoading(false));
   }, []);
 
-  // -----------------------------------
-  // FILTER LOGIC
-  // -----------------------------------
+  // -----------------------------
+  // GLOBAL FILTER LOGIC (FIXED)
+  // -----------------------------
   useEffect(() => {
     let filtered = allCoins;
 
     if (filter === "above21ema") {
-      filtered = allCoins.filter((coin) => coin.trend === "above21ema");
-    } else if (filter === "below21ema") {
-      filtered = allCoins.filter((coin) => coin.trend === "below21ema");
+      filtered = allCoins.filter((c) => c.trend === "above21ema");
+    }
+
+    if (filter === "below21ema") {
+      filtered = allCoins.filter((c) => c.trend === "below21ema");
     }
 
     setFilteredCoins(filtered);
-    setIndex(0);
+    setIndex(0); // reset index ALWAYS
   }, [allCoins, filter]);
 
-  // -----------------------------------
-  // KEYBOARD NAVIGATION (FIXED)
-  // -----------------------------------
+  // -----------------------------
+  // KEYBOARD NAV (DESKTOP ONLY)
+  // -----------------------------
   useEffect(() => {
     const handle = (e) => {
       if (!filteredCoins.length) return;
 
-      // prevent dropdown / browser hijack
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-      }
-
       if (e.key === "ArrowDown") {
+        e.preventDefault();
         setIndex((i) => Math.min(i + 1, filteredCoins.length - 1));
       }
 
       if (e.key === "ArrowUp") {
+        e.preventDefault();
         setIndex((i) => Math.max(i - 1, 0));
       }
     };
 
     window.addEventListener("keydown", handle, {
-      passive: false, // IMPORTANT so preventDefault works
+      passive: false,
     });
 
-    return () => {
-      window.removeEventListener("keydown", handle);
-    };
+    return () => window.removeEventListener("keydown", handle);
   }, [filteredCoins]);
 
-  // -----------------------------------
+  // -----------------------------
   // LOADING
-  // -----------------------------------
+  // -----------------------------
   if (loading) {
-    return (
-      <div
-        style={{
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          color: "white",
-          background: "#000",
-        }}
-      >
-        Loading screener...
-      </div>
-    );
+    return <div style={styles.center}>Loading screener...</div>;
   }
 
-  // -----------------------------------
+  // -----------------------------
   // ERROR
-  // -----------------------------------
+  // -----------------------------
   if (error) {
-    return (
-      <div
-        style={{
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          color: "white",
-          background: "#000",
-          padding: 20,
-          textAlign: "center",
-        }}
-      >
-        <div>
-          <p style={{ margin: 0, fontSize: 18 }}>Screener Error</p>
-          <p style={{ margin: 0 }}>{error}</p>
-        </div>
-      </div>
-    );
+    return <div style={styles.center}>Screener Error: {error}</div>;
   }
 
-  // -----------------------------------
+  // -----------------------------
   // MOBILE
-  // -----------------------------------
+  // -----------------------------
   if (isMobile) {
     return (
       <MobileSwiper
-        coins={filteredCoins}
+        coins={filteredCoins} // ✅ ALWAYS filtered
         selectedIndex={index}
         onSelect={setIndex}
-        timeframe={timeframe}
-        onTimeframeChange={setTimeframe}
         filter={filter}
         onFilterChange={setFilter}
+        timeframe={timeframe}
+        onTimeframeChange={setTimeframe}
       />
     );
   }
 
-  // -----------------------------------
+  // -----------------------------
   // DESKTOP
-  // -----------------------------------
+  // -----------------------------
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-      }}
-    >
+    <div style={{ display: "flex", height: "100vh" }}>
       <Screener
         coins={filteredCoins}
         selected={selected}
+        index={index}
+        setIndex={setIndex}
         filter={filter}
         onFilterChange={setFilter}
-        onSelect={setIndex}
       />
 
       {selected && (
@@ -188,3 +137,14 @@ export default function App() {
     </div>
   );
 }
+
+const styles = {
+  center: {
+    height: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    color: "white",
+    background: "#000",
+  },
+};
