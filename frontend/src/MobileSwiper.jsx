@@ -17,9 +17,7 @@ export default function MobileSwiper({
 
   // SAFE INDEX
   const safeIndex =
-    coins && coins.length > 0
-      ? Math.min(selectedIndex, coins.length - 1)
-      : 0;
+    coins && coins.length > 0 ? Math.min(selectedIndex, coins.length - 1) : 0;
 
   const selectedCoin = coins?.[safeIndex];
 
@@ -30,10 +28,7 @@ export default function MobileSwiper({
     const current = coins[safeIndex];
     if (!current) return;
 
-    const neighbors = [
-      coins[safeIndex - 1],
-      coins[safeIndex + 1],
-    ]
+    const neighbors = [coins[safeIndex - 1], coins[safeIndex + 1]]
       .filter(Boolean)
       .map((c) => c.symbol);
 
@@ -43,14 +38,16 @@ export default function MobileSwiper({
 
   if (!coins || coins.length === 0) {
     return (
-      <div style={{
-        height: "100vh",
-        background: "#000",
-        color: "white",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-      }}>
+      <div
+        style={{
+          height: "100vh",
+          background: "#000",
+          color: "white",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
         No coins match filter
       </div>
     );
@@ -163,9 +160,7 @@ export default function MobileSwiper({
                   Price: {Number(coin.close).toFixed(4)}
                 </p>
 
-                <p style={{ margin: 5 }}>
-                  EMA21: {coin.ema21?.toFixed(4)}
-                </p>
+                <p style={{ margin: 5 }}>EMA21: {coin.ema21?.toFixed(4)}</p>
               </div>
             </SwiperSlide>
           ))}
@@ -178,6 +173,7 @@ export default function MobileSwiper({
           <Chart
             symbol={selectedCoin.symbol}
             timeframe={timeframe}
+            onTimeframeChange={onTimeframeChange}
             inverted={inverted}
             onInvertChange={setInverted}
           />

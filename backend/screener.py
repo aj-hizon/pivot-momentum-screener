@@ -23,6 +23,7 @@ screener_lock = asyncio.Lock()
 refresh_task = None
 
 SEMAPHORE_LIMIT = 10
+EPSILON = 1e-12
 
 
 # ---------------------------
@@ -252,9 +253,17 @@ async def _refresh_screener():
                 # ---------------------------
                 # YOUR NEW RULES
                 # ---------------------------
-                
+
+                daily_condition = close_d < ema5_d
+                one_hour_condition = close_1h >= ema21_1h - EPSILON
+
+                print(
+                    f"[Screener debug] {sym} | dailyPrice={close_d} | dailyEMA5={ema5_d} | dailyCondition={daily_condition} | "
+                    f"oneHourPrice={close_1h} | oneHourEMA21={ema21_1h} | oneHourCondition={one_hour_condition} | final={daily_condition and one_hour_condition}"
+                )
+
                 # LONG setup
-                if close_1h > ema21_1h and close_d < ema5_d:
+                if daily_condition and one_hour_condition:
                     coins.append({
                         "symbol": sym,
                         "close": close_1h,
@@ -263,8 +272,8 @@ async def _refresh_screener():
                         "trend": "above21ema"
                     })
 
-# SHORT setup
-                elif close_1h < ema21_1h and close_d > ema5_d:
+                # SHORT setup
+                elif close_d > ema5_d and close_1h <= ema21_1h + EPSILON:
                     coins.append({
                         "symbol": sym,
                         "close": close_1h,

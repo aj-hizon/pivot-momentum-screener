@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createChart, CandlestickSeries, LineSeries } from "lightweight-charts";
 import { fetchKlinesWithCache } from "./chartCache";
 
@@ -10,6 +10,144 @@ export default function Chart({
   onInvertChange,
 }) {
   const ref = useRef();
+  const paletteRef = useRef(null);
+  const chartContainerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [selectedSuggestion, setSelectedSuggestion] = useState(0);
+
+  const timeframeOptions = [
+    { label: "1h", value: "60" },
+    { label: "4h", value: "240" },
+    { label: "1d", value: "D" },
+    { label: "1w", value: "W" },
+    { label: "5m", value: "5" },
+  ];
+
+  const suggestions = paletteQuery.trim()
+    ? timeframeOptions.filter((option) =>
+        option.label.toLowerCase().startsWith(paletteQuery.toLowerCase()),
+      )
+    : timeframeOptions;
+
+  useEffect(() => {
+    if (!isPaletteOpen) return;
+
+    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, [isPaletteOpen]);
+
+  useEffect(() => {
+    if (!isPaletteOpen) return;
+
+    const handlePointerDown = (event) => {
+      const clickedInsidePalette = paletteRef.current?.contains(event.target);
+      if (!clickedInsidePalette) {
+        setIsPaletteOpen(false);
+        setPaletteQuery("");
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isPaletteOpen]);
+
+  useEffect(() => {
+    if (!isPaletteOpen) return;
+
+    if (selectedSuggestion >= suggestions.length) {
+      setSelectedSuggestion(0);
+    }
+  }, [isPaletteOpen, selectedSuggestion, suggestions.length]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target;
+      const isEditable =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+
+      if (isEditable) {
+        if (event.key === "Escape" && isPaletteOpen) {
+          event.preventDefault();
+          setIsPaletteOpen(false);
+          setPaletteQuery("");
+        }
+
+        if (event.key === "Enter" && isPaletteOpen) {
+          event.preventDefault();
+          const inputValue = target?.value ?? paletteQuery;
+          const normalizedValue = inputValue.trim().toLowerCase();
+          const selected =
+            suggestions[selectedSuggestion] ||
+            timeframeOptions.find(
+              (option) => option.label.toLowerCase() === normalizedValue,
+            );
+          if (selected) {
+            onTimeframeChange?.(selected.value);
+          }
+          setIsPaletteOpen(false);
+          setPaletteQuery("");
+        }
+        return;
+      }
+
+      if (event.key === "Escape" && isPaletteOpen) {
+        event.preventDefault();
+        setIsPaletteOpen(false);
+        setPaletteQuery("");
+        return;
+      }
+
+      if (event.key === "Backspace" && isPaletteOpen) {
+        event.preventDefault();
+        setPaletteQuery((value) => value.slice(0, -1));
+        setSelectedSuggestion(0);
+        return;
+      }
+
+      if (isPaletteOpen) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setSelectedSuggestion((value) => (value + 1) % suggestions.length);
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setSelectedSuggestion((value) =>
+            value === 0 ? suggestions.length - 1 : value - 1,
+          );
+          return;
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const selected = suggestions[selectedSuggestion];
+          if (selected) {
+            onTimeframeChange?.(selected.value);
+          }
+          setIsPaletteOpen(false);
+          setPaletteQuery("");
+          return;
+        }
+      }
+
+      if (!/^[a-z0-9]$/i.test(event.key)) return;
+
+      event.preventDefault();
+      setPaletteQuery((value) => `${value}${event.key.toLowerCase()}`);
+      setSelectedSuggestion(0);
+      setIsPaletteOpen(true);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPaletteOpen, onTimeframeChange, selectedSuggestion, suggestions]);
 
   useEffect(() => {
     if (!symbol || !ref.current) return;
@@ -306,12 +444,82 @@ export default function Chart({
 
       {/* CHART */}
       <div
-        ref={ref}
+        ref={(node) => {
+          chartContainerRef.current = node;
+          ref.current = node;
+        }}
         style={{
           flex: 1,
           minHeight: 0,
+          position: "relative",
         }}
-      />
+      >
+        {isPaletteOpen && (
+          <div
+            ref={paletteRef}
+            style={{
+              position: "absolute",
+              top: "16px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 10,
+              width: "min(280px, calc(100% - 32px))",
+              background: "#111",
+              border: "1px solid #2f2f2f",
+              borderRadius: 8,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+              padding: 10,
+            }}
+          >
+            <input
+              ref={inputRef}
+              value={paletteQuery}
+              onChange={(event) => {
+                const value = event.target.value.toLowerCase();
+                setPaletteQuery(value);
+                setSelectedSuggestion(0);
+              }}
+              placeholder="Type 1h, 4h, 1d..."
+              style={{
+                width: "100%",
+                background: "#1a1a1a",
+                color: "white",
+                border: "1px solid #333",
+                borderRadius: 6,
+                padding: "8px 10px",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+
+            {suggestions.length > 0 && (
+              <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                {suggestions.map((option, index) => (
+                  <button
+                    key={option.label}
+                    onClick={() => {
+                      onTimeframeChange?.(option.value);
+                      setIsPaletteOpen(false);
+                      setPaletteQuery("");
+                    }}
+                    style={{
+                      textAlign: "left",
+                      background: index === selectedSuggestion ? "#26a69a" : "#222",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 6,
+                      padding: "8px 10px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
