@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getScreener } from "./api";
 import Screener from "./Screener";
 import Chart from "./Chart";
@@ -12,6 +12,9 @@ export default function App() {
   const [filter, setFilter] = useState("all");
   const [index, setIndex] = useState(0);
 
+  const selectedSymbolRef = useRef(null);
+  const previousFilterRef = useRef(filter);
+
   const [timeframe, setTimeframe] = useState("5");
   const [inverted, setInverted] = useState(false);
 
@@ -21,6 +24,31 @@ export default function App() {
   const isMobile = useIsMobile();
 
   const selected = filteredCoins[index] || null;
+
+  const selectCoin = (nextIndex, reason) => {
+    const nextCoin = filteredCoins[nextIndex];
+    if (!nextCoin) return;
+
+    const previousIndex = index;
+    const previousSymbol =
+      selectedSymbolRef.current || filteredCoins[previousIndex]?.symbol || null;
+    const nextSymbol = nextCoin.symbol;
+
+    if (previousIndex === nextIndex && previousSymbol === nextSymbol) {
+      return;
+    }
+
+    console.log("[Screener selection]", {
+      reason,
+      previousIndex,
+      newIndex: nextIndex,
+      previousSymbol,
+      newSymbol: nextSymbol,
+    });
+
+    selectedSymbolRef.current = nextSymbol;
+    setIndex(nextIndex);
+  };
 
   // -----------------------------
   // LOAD DATA
@@ -41,18 +69,44 @@ export default function App() {
   // GLOBAL FILTER LOGIC (FIXED)
   // -----------------------------
   useEffect(() => {
+    const filterChanged = previousFilterRef.current !== filter;
+    previousFilterRef.current = filter;
+
     let filtered = allCoins;
 
     if (filter === "above21ema") {
       filtered = allCoins.filter((c) => c.trend === "above21ema");
     }
 
-    if (filter === "below21ema") {
-      filtered = allCoins.filter((c) => c.trend === "below21ema");
+    if (filter === "1d-above21ema") {
+      filtered = allCoins.filter((c) => c.trend === "1d-above21ema");
     }
 
     setFilteredCoins(filtered);
-    setIndex(0); // reset index ALWAYS
+
+    if (filterChanged) {
+      const nextIndex = filtered.findIndex(
+        (coin) => coin.symbol === selectedSymbolRef.current,
+      );
+      const fallbackIndex = nextIndex >= 0 ? nextIndex : 0;
+      selectedSymbolRef.current = filtered[fallbackIndex]?.symbol || null;
+      setIndex(fallbackIndex);
+      return;
+    }
+
+    const previousSymbol = selectedSymbolRef.current;
+    if (previousSymbol) {
+      const nextIndex = filtered.findIndex((coin) => coin.symbol === previousSymbol);
+      if (nextIndex >= 0) {
+        selectedSymbolRef.current = previousSymbol;
+        setIndex(nextIndex);
+        return;
+      }
+    }
+
+    const fallbackIndex = 0;
+    selectedSymbolRef.current = filtered[fallbackIndex]?.symbol || null;
+    setIndex(fallbackIndex);
   }, [allCoins, filter]);
 
   // -----------------------------
@@ -60,16 +114,18 @@ export default function App() {
   // -----------------------------
   useEffect(() => {
     const handle = (e) => {
-      if (!filteredCoins.length) return;
+      if (!filteredCoins.length || e.repeat) return;
 
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setIndex((i) => Math.min(i + 1, filteredCoins.length - 1));
+        const nextIndex = Math.min(index + 1, filteredCoins.length - 1);
+        selectCoin(nextIndex, "keyboard");
       }
 
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setIndex((i) => Math.max(i - 1, 0));
+        const nextIndex = Math.max(index - 1, 0);
+        selectCoin(nextIndex, "keyboard");
       }
     };
 
@@ -78,7 +134,7 @@ export default function App() {
     });
 
     return () => window.removeEventListener("keydown", handle);
-  }, [filteredCoins]);
+  }, [filteredCoins, index]);
 
   // -----------------------------
   // LOADING
@@ -102,7 +158,7 @@ export default function App() {
       <MobileSwiper
         coins={filteredCoins} // ✅ ALWAYS filtered
         selectedIndex={index}
-        onSelect={setIndex}
+        onSelect={(nextIndex) => selectCoin(nextIndex, "swipe")}
         filter={filter}
         onFilterChange={setFilter}
         timeframe={timeframe}
@@ -120,7 +176,7 @@ export default function App() {
         coins={filteredCoins}
         selected={selected}
         index={index}
-        setIndex={setIndex}
+        setIndex={(nextIndex) => selectCoin(nextIndex, "mouse")}
         filter={filter}
         onFilterChange={setFilter}
       />

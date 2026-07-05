@@ -211,6 +211,16 @@ def ema_from_candles(candles, period):
     return prev, current, last_close
 
 
+def candle_touches_ema(candle, ema_value):
+    try:
+        low = float(candle[3])
+        high = float(candle[2])
+        ema = float(ema_value)
+        return low <= ema <= high
+    except (TypeError, ValueError):
+        return False
+
+
 # ---------------------------
 # SCREENER (NEW LOGIC)
 # ---------------------------
@@ -246,20 +256,42 @@ async def _refresh_screener():
             try:
                 _, ema21_1h, close_1h = ema_from_candles(candles_1h, 21)
                 _, ema5_d, close_d = ema_from_candles(candles_d, 5)
+                _, ema21_d, _ = ema_from_candles(candles_d, 21)
 
-                if ema21_1h is None or ema5_d is None:
+                if ema21_1h is None or ema5_d is None or ema21_d is None:
                     continue
 
                 # ---------------------------
-                # YOUR NEW RULES
+                # EXISTING FILTERS
                 # ---------------------------
 
                 daily_condition = close_d < ema5_d
                 one_hour_condition = close_1h >= ema21_1h - EPSILON
 
+                # ---------------------------
+                # NEW 1D ABOVE 21 EMA FILTER
+                # ---------------------------
+
+                daily_touch_candles = [
+                    candles_d[-1],
+                    candles_d[-2] if len(candles_d) > 1 else None,
+                    candles_d[-3] if len(candles_d) > 2 else None,
+                    candles_d[-4] if len(candles_d) > 3 else None,
+                ]
+
+                touched_daily_candle = None
+                for index, candle in enumerate(daily_touch_candles):
+                    if candle and candle_touches_ema(candle, ema21_d):
+                        touched_daily_candle = index
+                        break
+
+                daily_touch_condition = touched_daily_candle is not None
+                one_hour_above_condition = close_1h >= ema21_1h - EPSILON
+
                 print(
-                    f"[Screener debug] {sym} | dailyPrice={close_d} | dailyEMA5={ema5_d} | dailyCondition={daily_condition} | "
-                    f"oneHourPrice={close_1h} | oneHourEMA21={ema21_1h} | oneHourCondition={one_hour_condition} | final={daily_condition and one_hour_condition}"
+                    f"[Screener debug] {sym} | dailyTouchCandle={touched_daily_candle} | dailyEMA21={ema21_d} | "
+                    f"oneHourPrice={close_1h} | oneHourEMA21={ema21_1h} | dailyCondition={daily_touch_condition} | "
+                    f"oneHourCondition={one_hour_above_condition} | final={daily_touch_condition and one_hour_above_condition}"
                 )
 
                 # LONG setup
@@ -272,15 +304,15 @@ async def _refresh_screener():
                         "trend": "above21ema"
                     })
 
-                # SHORT setup
-                elif close_d > ema5_d and close_1h <= ema21_1h + EPSILON:
+                if daily_touch_condition and one_hour_above_condition:
                     coins.append({
                         "symbol": sym,
                         "close": close_1h,
                         "ema21": round(ema21_1h, 4),
                         "ema5_daily": round(ema5_d, 4),
-                        "trend": "below21ema"
+                        "trend": "1d-above21ema"
                     })
+
 
             except Exception:
                 continue

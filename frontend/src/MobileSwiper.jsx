@@ -93,7 +93,7 @@ export default function MobileSwiper({
         >
           <option value="all">All Coins</option>
           <option value="above21ema">Above 21 EMA</option>
-          <option value="below21ema">Below 21 EMA</option>
+          <option value="1d-above21ema">1D Above 21 EMA</option>
         </select>
 
         {/* TIMEFRAME DROPDOWN (FIX) */}

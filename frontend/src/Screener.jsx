@@ -53,7 +53,7 @@ export default function Screener({
         >
           <option value="all">All Coins</option>
           <option value="above21ema">Above 21 EMA</option>
-          <option value="below21ema">Below 21 EMA</option>
+          <option value="1d-above21ema">1D Above 21 EMA</option>
         </select>
       </div>
 
@@ -63,7 +63,10 @@ export default function Screener({
           <div
             key={coin.symbol}
             ref={(el) => (itemRefs.current[i] = el)}
-            onClick={() => setIndex(i)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIndex(i);
+            }}
             style={{
               padding: 10,
               cursor: "pointer",
