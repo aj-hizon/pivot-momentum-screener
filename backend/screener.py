@@ -276,7 +276,6 @@ async def _refresh_screener():
                     candles_d[-1],
                     candles_d[-2] if len(candles_d) > 1 else None,
                     candles_d[-3] if len(candles_d) > 2 else None,
-                    candles_d[-4] if len(candles_d) > 3 else None,
                 ]
 
                 touched_daily_candle = None
@@ -294,23 +293,22 @@ async def _refresh_screener():
                     f"oneHourCondition={one_hour_above_condition} | final={daily_touch_condition and one_hour_above_condition}"
                 )
 
-                # LONG setup
+                matches = []
+
                 if daily_condition and one_hour_condition:
-                    coins.append({
-                        "symbol": sym,
-                        "close": close_1h,
-                        "ema21": round(ema21_1h, 4),
-                        "ema5_daily": round(ema5_d, 4),
-                        "trend": "above21ema"
-                    })
+                    matches.append("above21ema")
 
                 if daily_touch_condition and one_hour_above_condition:
+                    matches.append("1d-above21ema")
+
+                if matches:
                     coins.append({
                         "symbol": sym,
                         "close": close_1h,
                         "ema21": round(ema21_1h, 4),
                         "ema5_daily": round(ema5_d, 4),
-                        "trend": "1d-above21ema"
+                        "trend": matches[0],
+                        "filters": matches,
                     })
 
 
