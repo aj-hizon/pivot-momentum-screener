@@ -237,7 +237,7 @@ def should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d):
     return (
         close_d < ema5_d
         and close_1h >= ema21_1h
-        and distance_pct >= 2.0
+        and distance_pct >= 1.0
         and volume_d >= 1_000_000
     )
 
