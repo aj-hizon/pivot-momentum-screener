@@ -53,7 +53,6 @@ export default function Screener({
         >
           <option value="all">All Coins</option>
           <option value="above21ema">Above 21 EMA</option>
-          <option value="1d-above21ema">1D Above 21 EMA</option>
         </select>
       </div>
 

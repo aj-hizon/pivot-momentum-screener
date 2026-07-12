@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import os
 import random
 import time
 
@@ -24,6 +25,10 @@ refresh_task = None
 
 SEMAPHORE_LIMIT = 10
 EPSILON = 1e-12
+
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", "demo")
+OANDA_API_KEY = os.getenv("OANDA_API_KEY", "")
+OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID", "")
 
 
 # ---------------------------
@@ -221,6 +226,10 @@ def candle_touches_ema(candle, ema_value):
         return False
 
 
+def should_include_coin(close_1h, ema21_1h, close_d, ema5_d):
+    return close_d < ema5_d and close_1h >= ema21_1h
+
+
 # ---------------------------
 # SCREENER (NEW LOGIC)
 # ---------------------------
@@ -265,41 +274,10 @@ async def _refresh_screener():
                 # EXISTING FILTERS
                 # ---------------------------
 
-                daily_condition = close_d < ema5_d
-                one_hour_condition = close_1h >= ema21_1h - EPSILON
-
-                # ---------------------------
-                # NEW 1D ABOVE 21 EMA FILTER
-                # ---------------------------
-
-                daily_touch_candles = [
-                    candles_d[-1],
-                    candles_d[-2] if len(candles_d) > 1 else None,
-                    candles_d[-3] if len(candles_d) > 2 else None,
-                ]
-
-                touched_daily_candle = None
-                for index, candle in enumerate(daily_touch_candles):
-                    if candle and candle_touches_ema(candle, ema21_d):
-                        touched_daily_candle = index
-                        break
-
-                daily_touch_condition = touched_daily_candle is not None
-                one_hour_above_condition = close_1h >= ema21_1h - EPSILON
-
-                print(
-                    f"[Screener debug] {sym} | dailyTouchCandle={touched_daily_candle} | dailyEMA21={ema21_d} | "
-                    f"oneHourPrice={close_1h} | oneHourEMA21={ema21_1h} | dailyCondition={daily_touch_condition} | "
-                    f"oneHourCondition={one_hour_above_condition} | final={daily_touch_condition and one_hour_above_condition}"
-                )
-
                 matches = []
 
-                if daily_condition and one_hour_condition:
+                if should_include_coin(close_1h, ema21_1h, close_d, ema5_d):
                     matches.append("above21ema")
-
-                if daily_touch_condition and one_hour_above_condition:
-                    matches.append("1d-above21ema")
 
                 if matches:
                     coins.append({
