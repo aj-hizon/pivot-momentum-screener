@@ -155,11 +155,11 @@ export default function MobileSwiper({
               >
                 <h3 style={{ margin: 0 }}>{coin.symbol}</h3>
 
-                <p style={{ margin: 5 }}>
-                  Price: {Number(coin.close).toFixed(4)}
-                </p>
-
-                <p style={{ margin: 5 }}>EMA21: {coin.ema21?.toFixed(4)}</p>
+                {coin.daily_distance_pct != null && (
+                  <p style={{ margin: 5 }}>
+                    {coin.daily_distance_pct}% below daily 5 EMA
+                  </p>
+                )}
               </div>
             </SwiperSlide>
           ))}

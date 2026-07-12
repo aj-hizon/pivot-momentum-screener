@@ -226,8 +226,20 @@ def candle_touches_ema(candle, ema_value):
         return False
 
 
-def should_include_coin(close_1h, ema21_1h, close_d, ema5_d):
-    return close_d < ema5_d and close_1h >= ema21_1h
+def get_daily_distance_pct(close_d, ema5_d):
+    if not ema5_d:
+        return 0.0
+    return round(((ema5_d - close_d) / ema5_d) * 100, 2)
+
+
+def should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d):
+    distance_pct = get_daily_distance_pct(close_d, ema5_d)
+    return (
+        close_d < ema5_d
+        and close_1h >= ema21_1h
+        and distance_pct >= 2.0
+        and volume_d >= 1_000_000
+    )
 
 
 # ---------------------------
@@ -267,6 +279,12 @@ async def _refresh_screener():
                 _, ema5_d, close_d = ema_from_candles(candles_d, 5)
                 _, ema21_d, _ = ema_from_candles(candles_d, 21)
 
+                volume_d = 0
+                try:
+                    volume_d = float(candles_d[-1][5])
+                except Exception:
+                    volume_d = 0
+
                 if ema21_1h is None or ema5_d is None or ema21_d is None:
                     continue
 
@@ -276,15 +294,20 @@ async def _refresh_screener():
 
                 matches = []
 
-                if should_include_coin(close_1h, ema21_1h, close_d, ema5_d):
+                if should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d):
                     matches.append("above21ema")
 
                 if matches:
+                    daily_distance_pct = 0.0
+                    if ema5_d:
+                        daily_distance_pct = round(((ema5_d - close_d) / ema5_d) * 100, 2)
+
                     coins.append({
                         "symbol": sym,
                         "close": close_1h,
                         "ema21": round(ema21_1h, 4),
                         "ema5_daily": round(ema5_d, 4),
+                        "daily_distance_pct": daily_distance_pct,
                         "trend": matches[0],
                         "filters": matches,
                     })

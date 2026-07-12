@@ -83,6 +83,12 @@ export default function Screener({
             >
               {coin.trend}
             </div>
+
+            {coin.daily_distance_pct != null && (
+              <div style={{ fontSize: 10, color: "#aaa", marginTop: 4 }}>
+                {coin.daily_distance_pct}% below daily 5 EMA
+              </div>
+            )}
           </div>
         ))}
       </div>
