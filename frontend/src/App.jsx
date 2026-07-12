@@ -17,6 +17,7 @@ export default function App() {
   const [inverted, setInverted] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
   const isMobile = useIsMobile();
@@ -63,19 +64,38 @@ export default function App() {
     setSelectedSymbol(nextCoin.symbol);
   };
 
+  const loadScreener = async (showLoading = false, forceRefresh = false) => {
+    if (showLoading) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+
+    setError(null);
+
+    try {
+      const data = await getScreener(forceRefresh);
+      setAllCoins(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Failed");
+    } finally {
+      if (showLoading) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
+    }
+  };
+
+  const handleRefresh = () => {
+    loadScreener(false, true);
+  };
+
   // -----------------------------
   // LOAD DATA
   // -----------------------------
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    getScreener()
-      .then((data) => {
-        setAllCoins(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => setError(err.message || "Failed"))
-      .finally(() => setLoading(false));
+    loadScreener(true, false);
   }, []);
 
   // -----------------------------
@@ -152,6 +172,8 @@ export default function App() {
         onFilterChange={setFilter}
         timeframe={timeframe}
         onTimeframeChange={setTimeframe}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
       />
     );
   }
@@ -168,6 +190,8 @@ export default function App() {
         setIndex={(nextIndex) => selectCoin(nextIndex)}
         filter={filter}
         onFilterChange={setFilter}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
       />
 
       {selected && (

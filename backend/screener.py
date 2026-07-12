@@ -13,12 +13,14 @@ symbols_cache_time = 0
 
 cached_screener = []
 screener_cache_time = 0
+last_screener_refresh_time = 0
 
 klines_cache = {}
 
 SYMBOL_CACHE_DURATION = 3600
 SCREENER_CACHE_DURATION = 60
 KLINES_CACHE_DURATION = 300
+FORCE_REFRESH_COOLDOWN_SECONDS = 30
 
 screener_lock = asyncio.Lock()
 refresh_task = None
@@ -246,8 +248,8 @@ def should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d):
 # SCREENER (NEW LOGIC)
 # ---------------------------
 
-async def _refresh_screener():
-    global cached_screener, screener_cache_time, refresh_task
+async def _refresh_screener(force_refresh=False):
+    global cached_screener, screener_cache_time, refresh_task, last_screener_refresh_time
 
     async with screener_lock:
 
@@ -318,6 +320,7 @@ async def _refresh_screener():
 
         cached_screener = coins
         screener_cache_time = time.time()
+        last_screener_refresh_time = screener_cache_time
 
         print(f"[Screener] updated: {len(coins)} coins")
 
@@ -329,16 +332,20 @@ async def _refresh_screener():
 # RUN SCREENER
 # ---------------------------
 
-async def run_screener():
-    global cached_screener, screener_cache_time, refresh_task
+async def run_screener(force_refresh=False):
+    global cached_screener, screener_cache_time, refresh_task, last_screener_refresh_time
 
     now = time.time()
 
-    if cached_screener and now - screener_cache_time < SCREENER_CACHE_DURATION:
+    if not force_refresh and cached_screener and now - screener_cache_time < SCREENER_CACHE_DURATION:
+        return cached_screener
+
+    if force_refresh and now - last_screener_refresh_time < FORCE_REFRESH_COOLDOWN_SECONDS:
+        print("[Screener] skipped forced refresh due to cooldown")
         return cached_screener
 
     if refresh_task is None:
-        refresh_task = asyncio.create_task(_refresh_screener())
+        refresh_task = asyncio.create_task(_refresh_screener(force_refresh=force_refresh))
         return cached_screener
 
     return cached_screener

@@ -12,6 +12,8 @@ export default function MobileSwiper({
   onTimeframeChange,
   filter,
   onFilterChange,
+  onRefresh,
+  refreshing,
 }) {
   const [inverted, setInverted] = useState(false);
 
@@ -114,6 +116,22 @@ export default function MobileSwiper({
           <option value="D">1D</option>
           <option value="W">1W</option>
         </select>
+
+        {/* REFRESH */}
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          style={{
+            background: refreshing ? "#333" : "#2563eb",
+            color: "white",
+            border: "none",
+            padding: "6px 10px",
+            borderRadius: 4,
+            cursor: refreshing ? "not-allowed" : "pointer",
+          }}
+        >
+          {refreshing ? "⏳" : "↻"}
+        </button>
 
         {/* INVERT */}
         <button

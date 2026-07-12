@@ -7,6 +7,8 @@ export default function Screener({
   setIndex,
   filter,
   onFilterChange,
+  onRefresh,
+  refreshing,
 }) {
   const containerRef = useRef(null);
   const itemRefs = useRef([]);
@@ -54,6 +56,23 @@ export default function Screener({
           <option value="all">All Coins</option>
           <option value="above21ema">Above 21 EMA</option>
         </select>
+
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          style={{
+            width: "100%",
+            marginTop: 8,
+            background: refreshing ? "#333" : "#2563eb",
+            color: "white",
+            border: "none",
+            padding: "7px 8px",
+            borderRadius: 4,
+            cursor: refreshing ? "not-allowed" : "pointer",
+          }}
+        >
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
       </div>
 
       {/* LIST */}

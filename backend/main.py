@@ -73,8 +73,8 @@ async def root():
 
 
 @app.get("/screener")
-async def screener():
-    return await run_screener()
+async def screener(force_refresh: bool = False):
+    return await run_screener(force_refresh=force_refresh)
 
 
 @app.get("/klines")

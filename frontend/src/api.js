@@ -1,7 +1,7 @@
 const BASE_URL = "/api";
 
-export async function getScreener() {
-  const res = await fetch(`${BASE_URL}/screener`);
+export async function getScreener(forceRefresh = false) {
+  const res = await fetch(`${BASE_URL}/screener?force_refresh=${forceRefresh}`);
   return res.json();
 }
 
