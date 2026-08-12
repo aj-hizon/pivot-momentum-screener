@@ -234,13 +234,32 @@ def get_daily_distance_pct(close_d, ema5_d):
     return round(((ema5_d - close_d) / ema5_d) * 100, 2)
 
 
-def should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d):
+def has_green_daily_candle(candles_d):
+    if not candles_d:
+        return False
+
+    lookback = candles_d[-4:]
+    for candle in lookback:
+        try:
+            open_price = float(candle[1])
+            close_price = float(candle[4])
+            if close_price > open_price:
+                return True
+        except (TypeError, ValueError, IndexError):
+            continue
+
+    return False
+
+
+def should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d, candles_d=None):
     distance_pct = get_daily_distance_pct(close_d, ema5_d)
+    green_daily_ok = True if candles_d is None else has_green_daily_candle(candles_d)
     return (
         close_d < ema5_d
         and close_1h >= ema21_1h
         and distance_pct >= 1.0
         and volume_d >= 500_000
+        and green_daily_ok
     )
 
 
@@ -296,7 +315,7 @@ async def _refresh_screener(force_refresh=False):
 
                 matches = []
 
-                if should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d):
+                if should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d, candles_d=candles_d):
                     matches.append("above21ema")
 
                 if matches:
