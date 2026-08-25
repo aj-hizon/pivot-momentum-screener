@@ -251,6 +251,10 @@ def has_green_daily_candle(candles_d):
     return False
 
 
+def is_below_21_ema(close_1h, ema21_1h, volume_d):
+    return close_1h <= ema21_1h and volume_d >= 500_000
+
+
 def should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d, candles_d=None):
     distance_pct = get_daily_distance_pct(close_d, ema5_d)
     green_daily_ok = True if candles_d is None else has_green_daily_candle(candles_d)
@@ -317,6 +321,9 @@ async def _refresh_screener(force_refresh=False):
 
                 if should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d, candles_d=candles_d):
                     matches.append("above21ema")
+
+                if is_below_21_ema(close_1h, ema21_1h, volume_d):
+                    matches.append("below21ema")
 
                 if matches:
                     daily_distance_pct = 0.0

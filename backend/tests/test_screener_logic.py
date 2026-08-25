@@ -1,6 +1,13 @@
 from backend import screener
 
 
+def test_below_21_ema_category_includes_price_at_or_below_hourly_ema():
+    assert screener.is_below_21_ema(90, 100, 500_000) is True
+    assert screener.is_below_21_ema(100, 100, 500_000) is True
+    assert screener.is_below_21_ema(110, 100, 500_000) is False
+    assert screener.is_below_21_ema(90, 100, 499_999) is False
+
+
 def test_has_green_daily_candle_requires_current_or_recent_green_candle():
     green = [["0", "10", "12", "9", "11", "100"]]
     mixed = [["0", "10", "12", "9", "9", "100"], ["0", "10", "12", "9", "11", "100"]]

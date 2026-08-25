@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
 import Chart from "./Chart";
@@ -14,9 +14,9 @@ export default function MobileSwiper({
   onFilterChange,
   onRefresh,
   refreshing,
+  inverted,
+  onInvertChange,
 }) {
-  const [inverted, setInverted] = useState(false);
-
   // SAFE INDEX
   const safeIndex =
     coins && coins.length > 0 ? Math.min(selectedIndex, coins.length - 1) : 0;
@@ -95,6 +95,7 @@ export default function MobileSwiper({
         >
           <option value="all">All Coins</option>
           <option value="above21ema">Above 21 EMA</option>
+          <option value="below21ema">Below 21 EMA</option>
         </select>
 
         {/* TIMEFRAME DROPDOWN (FIX) */}
@@ -135,7 +136,7 @@ export default function MobileSwiper({
 
         {/* INVERT */}
         <button
-          onClick={() => setInverted((p) => !p)}
+          onClick={() => onInvertChange((p) => !p)}
           style={{
             background: inverted ? "#ff6b6b" : "#333",
             color: "white",
@@ -192,7 +193,7 @@ export default function MobileSwiper({
             timeframe={timeframe}
             onTimeframeChange={onTimeframeChange}
             inverted={inverted}
-            onInvertChange={setInverted}
+            onInvertChange={onInvertChange}
           />
         )}
       </div>

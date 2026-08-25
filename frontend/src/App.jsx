@@ -91,6 +91,11 @@ export default function App() {
     loadScreener(false, true);
   };
 
+  const handleFilterChange = (nextFilter) => {
+    setFilter(nextFilter);
+    setInverted(nextFilter === "below21ema");
+  };
+
   // -----------------------------
   // LOAD DATA
   // -----------------------------
@@ -169,7 +174,9 @@ export default function App() {
         selectedIndex={selectedIndex}
         onSelect={(nextIndex) => selectCoin(nextIndex)}
         filter={filter}
-        onFilterChange={setFilter}
+        onFilterChange={handleFilterChange}
+        inverted={inverted}
+        onInvertChange={setInverted}
         timeframe={timeframe}
         onTimeframeChange={setTimeframe}
         onRefresh={handleRefresh}
@@ -189,7 +196,7 @@ export default function App() {
         index={selectedIndex}
         setIndex={(nextIndex) => selectCoin(nextIndex)}
         filter={filter}
-        onFilterChange={setFilter}
+        onFilterChange={handleFilterChange}
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
