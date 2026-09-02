@@ -251,8 +251,18 @@ def has_green_daily_candle(candles_d):
     return False
 
 
-def is_below_21_ema(close_1h, ema21_1h, volume_d):
-    return close_1h <= ema21_1h and volume_d >= 500_000
+def is_below_21_ema(close_1h, ema21_1h, volume_d, close_d=None, ema21_d=None):
+    if close_1h > ema21_1h or volume_d < 500_000:
+        return False
+
+    if close_d is not None and ema21_d is not None:
+        if ema21_d >= close_1h:
+            return False
+        distance_pct = ((close_1h - ema21_d) / close_1h) * 100
+        if distance_pct < 3.0:
+            return False
+
+    return True
 
 
 def should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d, candles_d=None):
@@ -286,21 +296,23 @@ async def _refresh_screener(force_refresh=False):
         async def worker(sym):
             async with semaphore:
                 _, candles_1h = await get_klines(shared_session, sym, interval="60", limit=200)
+                _, candles_4h = await get_klines(shared_session, sym, interval="240", limit=200)
                 _, candles_d = await get_klines(shared_session, sym, interval="D", limit=30)
-                return sym, candles_1h, candles_d
+                return sym, candles_1h, candles_4h, candles_d
 
         tasks = [asyncio.create_task(worker(s)) for s in symbols]
 
         coins = []
 
         for task in asyncio.as_completed(tasks):
-            sym, candles_1h, candles_d = await task
+            sym, candles_1h, candles_4h, candles_d = await task
 
             if not candles_1h or not candles_d:
                 continue
 
             try:
                 _, ema21_1h, close_1h = ema_from_candles(candles_1h, 21)
+                _, ema21_4h, close_4h = ema_from_candles(candles_4h, 21)
                 _, ema5_d, close_d = ema_from_candles(candles_d, 5)
                 _, ema21_d, _ = ema_from_candles(candles_d, 21)
 
@@ -322,7 +334,7 @@ async def _refresh_screener(force_refresh=False):
                 if should_include_coin(close_1h, ema21_1h, close_d, ema5_d, volume_d, candles_d=candles_d):
                     matches.append("above21ema")
 
-                if is_below_21_ema(close_1h, ema21_1h, volume_d):
+                if is_below_21_ema(close_1h, ema21_1h, volume_d, close_d=close_d, ema21_d=ema21_d):
                     matches.append("below21ema")
 
                 if matches:
@@ -372,6 +384,8 @@ async def run_screener(force_refresh=False):
 
     if refresh_task is None:
         refresh_task = asyncio.create_task(_refresh_screener(force_refresh=force_refresh))
-        return cached_screener
 
+    result = await refresh_task
+    if result:
+        cached_screener = result
     return cached_screener
