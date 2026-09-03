@@ -337,7 +337,7 @@ async def _refresh_screener(force_refresh=False):
                 if is_below_21_ema(close_1h, ema21_1h, volume_d, close_d=close_d, ema21_d=ema21_d):
                     matches.append("below21ema")
 
-                if matches:
+                if matches or sym == "BTCUSDT":
                     daily_distance_pct = 0.0
                     if ema5_d:
                         daily_distance_pct = round(((ema5_d - close_d) / ema5_d) * 100, 2)
@@ -348,7 +348,7 @@ async def _refresh_screener(force_refresh=False):
                         "ema21": round(ema21_1h, 4),
                         "ema5_daily": round(ema5_d, 4),
                         "daily_distance_pct": daily_distance_pct,
-                        "trend": matches[0],
+                        "trend": matches[0] if matches else "market",
                         "filters": matches,
                     })
 
@@ -356,7 +356,7 @@ async def _refresh_screener(force_refresh=False):
             except Exception:
                 continue
 
-        cached_screener = coins
+        cached_screener = sorted(coins, key=lambda coin: coin["symbol"] != "BTCUSDT")
         screener_cache_time = time.time()
         last_screener_refresh_time = screener_cache_time
 

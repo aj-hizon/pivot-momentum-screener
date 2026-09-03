@@ -23,17 +23,20 @@ export default function App() {
   const isMobile = useIsMobile();
 
   const filteredCoins = useMemo(() => {
-    if (filter === "all") {
-      return allCoins;
-    }
-
-    return allCoins.filter((coin) => {
+    const btcCoin = allCoins.find((coin) => coin.symbol === "BTCUSDT");
+    const matchingCoins = filter === "all" ? allCoins : allCoins.filter((coin) => {
       if (Array.isArray(coin.filters)) {
         return coin.filters.includes(filter);
       }
 
       return coin.trend === filter;
     });
+
+    if (!btcCoin) {
+      return matchingCoins;
+    }
+
+    return [btcCoin, ...matchingCoins.filter((coin) => coin.symbol !== "BTCUSDT")];
   }, [allCoins, filter]);
 
   const selectedIndex = useMemo(() => {
